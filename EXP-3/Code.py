@@ -1,68 +1,67 @@
+
 import tensorflow as tf
-import numpy as np
-from tensorflow.examples.tutorials.mnist import input_data
+import matplotlib.pyplot as plt
 
 # Load MNIST dataset
-mnist = input_data.read_data_sets("MNIST_data/", one_hot=True)
+(x_train, y_train), (x_test, y_test) = tf.keras.datasets.mnist.load_data()
 
-# Define network architecture
-input_size = 784   # 28x28 pixels (flattened)
-hidden1_size = 128  # First hidden layer size
-hidden2_size = 64   # Second hidden layer size
-output_size = 10   # Output layer size (digits 0-9)
-learning_rate = 0.01  # Learning rate for optimizer
+# Normalize input data
+x_train, x_test = tf.cast(x_train, tf.float32) / 255.0, tf.cast(x_test, tf.float32) / 255.0
 
-# Define placeholders for inputs and outputs
-X = tf.placeholder(tf.float32, [None, input_size])  # Input images
-y = tf.placeholder(tf.float32, [None, output_size])  # Labels (one-hot encoded)
+# Flatten images
+x_train, x_test = tf.reshape(x_train, [-1, 28 * 28]), tf.reshape(x_test, [-1, 28 * 28])
+
+# Define model parameters
+hidden_units = 128
+output_size = 10
 
 # Initialize weights and biases
-weights = {
-    'W1': tf.Variable(tf.random_normal([input_size, hidden1_size])),  # Weights from input to hidden layer 1
-    'W2': tf.Variable(tf.random_normal([hidden1_size, hidden2_size])),  # Weights from hidden layer 1 to hidden layer 2
-    'W3': tf.Variable(tf.random_normal([hidden2_size, output_size]))  # Weights from hidden layer 2 to output layer
-}
-biases = {
-    'b1': tf.Variable(tf.zeros([hidden1_size])),  # Bias for hidden layer 1
-    'b2': tf.Variable(tf.zeros([hidden2_size])),  # Bias for hidden layer 2
-    'b3': tf.Variable(tf.zeros([output_size]))  # Bias for output layer
-}
+W1 = tf.Variable(tf.random.normal([28 * 28, hidden_units]))
+b1 = tf.Variable(tf.zeros([hidden_units]))
+W2 = tf.Variable(tf.random.normal([hidden_units, output_size]))
+b2 = tf.Variable(tf.zeros([output_size]))
 
-# Feed-forward propagation
-def neural_network(X):
-    layer1 = tf.nn.relu(tf.add(tf.matmul(X, weights['W1']), biases['b1']))  # First hidden layer with ReLU activation
-    layer2 = tf.nn.relu(tf.add(tf.matmul(layer1, weights['W2']), biases['b2']))  # Second hidden layer with ReLU activation
-    output_layer = tf.add(tf.matmul(layer2, weights['W3']), biases['b3'])  # Output layer (logits)
-    return output_layer
 
-# Compute logits and loss
-logits = neural_network(X)
-loss = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits_v2(logits=logits, labels=y))  # Cross-entropy loss
+# Define forward pass
+def forward_pass(x):
+    hidden_layer = tf.nn.sigmoid(tf.matmul(x, W1) + b1)
+    return tf.nn.softmax(tf.matmul(hidden_layer, W2) + b2)  # Using softmax for classification
 
-# Backpropagation (Gradient Descent Optimizer)
-optimizer = tf.train.AdamOptimizer(learning_rate).minimize(loss)  # Optimizer for minimizing loss
 
-# Accuracy calculation
-correct_pred = tf.equal(tf.argmax(logits, 1), tf.argmax(y, 1))  # Check if predictions match labels
-accuracy = tf.reduce_mean(tf.cast(correct_pred, tf.float32))  # Calculate accuracy
+# Define loss function and optimizer
+def compute_loss(y_true, y_pred):
+    return tf.reduce_mean(tf.losses.sparse_categorical_crossentropy(y_true, y_pred))
 
-# Training the neural network
-num_epochs = 10  # Number of training epochs
-batch_size = 100  # Size of each training batch
 
-with tf.Session() as sess:
-    sess.run(tf.global_variables_initializer())  # Initialize all variables
-    
-    for epoch in range(num_epochs):
-        num_batches = mnist.train.num_examples // batch_size  # Determine number of batches per epoch
-        for i in range(num_batches):
-            batch_x, batch_y = mnist.train.next_batch(batch_size)  # Fetch mini-batch
-            sess.run(optimizer, feed_dict={X: batch_x, y: batch_y})  # Perform optimization
-        
-        # Calculate loss and accuracy for current epoch
-        train_loss, train_acc = sess.run([loss, accuracy], feed_dict={X: mnist.train.images, y: mnist.train.labels})
-        print(f"Epoch {epoch+1}, Loss: {train_loss:.4f}, Accuracy: {train_acc:.4f}")
-    
-    # Test model on test dataset
-    test_acc = sess.run(accuracy, feed_dict={X: mnist.test.images, y: mnist.test.labels})
-    print(f"Test Accuracy: {test_acc:.4f}")
+optimizer = tf.optimizers.Adam()
+
+# Training loop
+epochs = 20
+batch_size = 32
+loss_history = []
+dataset = tf.data.Dataset.from_tensor_slices((x_train, y_train)).batch(batch_size)
+
+for epoch in range(epochs):
+    epoch_loss = 0
+    for x_batch, y_batch in dataset.as_numpy_iterator():
+        with tf.GradientTape() as tape:
+            y_pred = forward_pass(x_batch)
+            loss = compute_loss(y_batch, y_pred)
+        gradients = tape.gradient(loss, [W1, b1, W2, b2])
+        optimizer.apply_gradients(zip(gradients, [W1, b1, W2, b2]))
+        epoch_loss += loss.numpy()
+
+    loss_history.append(epoch_loss / len(dataset))
+    print(f"Epoch {epoch + 1}, Loss: {epoch_loss / len(dataset):.4f}")
+
+# Evaluate the model
+accuracy = tf.reduce_mean(tf.cast(tf.argmax(forward_pass(x_test), axis=1) == y_test, tf.float32))
+print(f"Test Accuracy: {accuracy.numpy() * 100:.2f}%")
+
+# Plot loss curve
+plt.plot(range(1, epochs + 1), loss_history, marker='o', label='Loss')
+plt.xlabel('Epochs')
+plt.ylabel('Loss')
+plt.title('Loss Curve')
+plt.legend()
+plt.show()

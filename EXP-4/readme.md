@@ -1,4 +1,5 @@
 Description of the Model
+
 Input Layer: 784 neurons (MNIST images are 28x28 pixels, flattened into a vector).
 Two Hidden Layers:
 Experiments with different configurations of neurons per layer.
@@ -10,6 +11,7 @@ Mini-batch gradient descent with a batch size of 100.
 The dataset is shuffled, batched, and prefetched for optimized performance.
 
 Description of the Code
+
 Checks for GPU availability and enables memory growth.
 Disables Eager Execution (for better performance in TensorFlow 1.x-style execution).
 
